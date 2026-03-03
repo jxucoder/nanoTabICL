@@ -331,6 +331,8 @@ class PretrainConfig:
     device: str = "auto"
     seed: int = 42
     log_every: int = 100
+    use_amp: bool = True
+    warmup_steps: int = 500
 
 
 def _resolve_device(s: str) -> torch.device:
@@ -349,7 +351,20 @@ def pretrain(model: NanoTabICL, cfg: PretrainConfig | None = None) -> list[float
     dev = _resolve_device(cfg.device)
     model.to(dev).train()
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
-    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg.steps)
+
+    warmup_sched = torch.optim.lr_scheduler.LinearLR(
+        opt, start_factor=1e-2, total_iters=cfg.warmup_steps,
+    )
+    cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+        opt, T_max=max(1, cfg.steps - cfg.warmup_steps),
+    )
+    sched = torch.optim.lr_scheduler.SequentialLR(
+        opt, schedulers=[warmup_sched, cosine_sched], milestones=[cfg.warmup_steps],
+    )
+
+    use_amp = cfg.use_amp and dev.type == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+
     torch.manual_seed(cfg.seed)
     is_cls = model.cfg.max_classes > 0
     priors: list[Prior] = ["mlp", "linear", "tree"]
@@ -376,27 +391,30 @@ def pretrain(model: NanoTabICL, cfg: PretrainConfig | None = None) -> list[float
             Ys.append(y)
         X, Y = torch.stack(Xs), torch.stack(Ys)
 
-        # per-column normalisation (train rows only to avoid test leakage)
         mu = X[:, :ts, :].mean(dim=1, keepdim=True)
         sd = X[:, :ts, :].std(dim=1, keepdim=True).clamp(min=1e-6)
         X = (X - mu) / sd
 
-        logits = model(X, Y[:, :ts])
-        if is_cls:
-            nc = int(Y.max().item()) + 1
-            loss = F.cross_entropy(logits[:, :, :nc].reshape(-1, nc), Y[:, ts:].reshape(-1))
-        else:
-            loss = F.mse_loss(logits.squeeze(-1), Y[:, ts:])
+        with torch.amp.autocast("cuda", enabled=use_amp):
+            logits = model(X, Y[:, :ts])
+            if is_cls:
+                nc = int(Y.max().item()) + 1
+                loss = F.cross_entropy(logits[:, :, :nc].reshape(-1, nc), Y[:, ts:].reshape(-1))
+            else:
+                loss = F.mse_loss(logits.squeeze(-1), Y[:, ts:])
 
         opt.zero_grad()
-        loss.backward()
+        scaler.scale(loss).backward()
+        scaler.unscale_(opt)
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        opt.step()
+        scaler.step(opt)
+        scaler.update()
         sched.step()
         losses.append(loss.item())
         if step % cfg.log_every == 0:
             avg = sum(losses[-cfg.log_every:]) / cfg.log_every
-            print(f"  step {step:>5d}/{cfg.steps}  loss={avg:.4f}")
+            lr_now = opt.param_groups[0]["lr"]
+            print(f"  step {step:>5d}/{cfg.steps}  loss={avg:.4f}  lr={lr_now:.2e}")
 
     model.eval()
     return losses

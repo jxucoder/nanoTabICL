@@ -40,11 +40,11 @@ uv run python -m unittest discover -s tests
 
 ## Website demo (GitHub Pages ready)
 
-A beginner-friendly TabICLv2 explainer + interactive toy demo lives in `docs/`:
+A visual, animated explanation of TabICLv2 lives in `docs/`:
 
-- `docs/index.html` – walkthrough for someone with basic ML background.
-- `docs/app.js` – synthetic tabular task + context-based toy predictor.
-- `docs/styles.css` – page styling.
+- `docs/index.html` – step-by-step walkthrough of all 3 stages with concrete examples.
+- `docs/app.js` – scroll-triggered animations and canvas visualizations.
+- `docs/styles.css` – Apple-style page styling.
 
 Preview locally:
 

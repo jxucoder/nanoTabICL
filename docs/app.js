@@ -27,7 +27,7 @@ const animObserver = new IntersectionObserver(
   },
   { threshold: 0.25 }
 );
-document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
+document.querySelectorAll(".s1-inject, .pipeline").forEach((el) =>
   animObserver.observe(el)
 );
 
@@ -94,48 +94,7 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
 })();
 
 /* ================================================================
-   3.  Stage 1a – column-by-column highlight cycling
-   ================================================================ */
-(function initColCycle() {
-  const table = document.getElementById("s1-table");
-  if (!table) return;
-  const rows = table.querySelectorAll(".s1t-row");
-  const COLS = 4;
-  let col = -1;
-  let active = false;
-  let interval;
-
-  function highlight(c) {
-    rows.forEach((row) => {
-      const cells = row.querySelectorAll("span");
-      cells.forEach((cell, j) => {
-        cell.classList.toggle("hl", j === c);
-      });
-    });
-  }
-
-  function cycle() {
-    col = (col + 1) % COLS;
-    highlight(col);
-  }
-
-  const obs = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting && !active) {
-        active = true;
-        table.classList.add("active");
-        cycle();
-        interval = setInterval(cycle, 1200);
-        obs.unobserve(table);
-      }
-    },
-    { threshold: 0.3 }
-  );
-  obs.observe(table);
-})();
-
-/* ================================================================
-   4.  Stage 1c – ISAB two-step attention canvas
+   3.  Stage 1 – ISAB two-step attention canvas
    ================================================================ */
 (function initISABCanvas() {
   const canvas = document.getElementById("s1-isab");
@@ -144,7 +103,7 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
   const W = 440;
   const H = 260;
 
-  const N_VALS = 5;
+  const N_VALS = 3;
   const N_IND = 3;
   const colX = 60;
   const indX = 220;
@@ -215,12 +174,14 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
     const elapsed = started ? (now - startTime) / 1000 : 0;
 
     // Phase 1 (0–1.2s): show value nodes
+    const valLabels = ["0.3", "\u22120.7", "0.1"];
+    const valColors = ["#dbeafe", "#e8f0fe", "#fef9e7"];
     for (let i = 0; i < N_VALS; i++) {
       const t = ease(Math.min(1, Math.max(0, (elapsed - i * 0.08) / 0.4)));
-      drawNode(vals[i].x, vals[i].y, nodeR * t, "#f0f2f5", "#d2d2d7",
-        t > 0.6 ? `v${i + 1}` : null);
+      drawNode(vals[i].x, vals[i].y, nodeR * t, valColors[i], "#d2d2d7",
+        t > 0.6 ? valLabels[i] : null);
     }
-    if (elapsed > 0.2) drawLabel(colX, H - 18, "Column values");
+    if (elapsed > 0.2) drawLabel(colX, H - 18, "Column x\u2081 values");
 
     // Phase 2 (0.6–1.5s): show inducing points
     for (let i = 0; i < N_IND; i++) {
@@ -252,7 +213,7 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
       ctx.fillStyle = "#0071e3";
       ctx.font = "600 9px Inter, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("Step 1: attend →", (colX + indX) / 2, 18);
+      ctx.fillText("Step A: attend \u2192", (colX + indX) / 2, 18);
       ctx.globalAlpha = 1;
     }
 
@@ -275,19 +236,20 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
       ctx.fillStyle = "#0071e3";
       ctx.font = "600 9px Inter, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("Step 2: attend back →", (indX + outX) / 2, 18);
+      ctx.fillText("Step B: attend back \u2192", (indX + outX) / 2, 18);
       ctx.globalAlpha = 1;
     }
 
     // Phase 5 (2.8–3.5s): output nodes
+    const outLabels = ["e\u2081", "e\u2082", "e\u2083"];
     for (let i = 0; i < N_VALS; i++) {
       const t = ease(Math.min(1, Math.max(0, (elapsed - 2.8 - i * 0.06) / 0.4)));
       if (t > 0) {
         drawNode(outs[i].x, outs[i].y, nodeR * t, "#dbeafe", "#0071e3",
-          t > 0.6 ? `e${i + 1}` : null);
+          t > 0.6 ? outLabels[i] : null);
       }
     }
-    if (elapsed > 3.0) drawLabel(outX, H - 18, "Enriched embeddings");
+    if (elapsed > 3.0) drawLabel(outX, H - 18, "Enriched vectors");
 
     requestAnimationFrame(draw);
   }
@@ -304,9 +266,9 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
   const W = 360;
   const H = 280;
 
-  const featureLabels = ["e\u2081", "e\u2082", "e\u2083", "e\u2084"];
-  const clsLabels = ["CLS\u2081", "CLS\u2082"];
-  const nodeCount = featureLabels.length + clsLabels.length;
+  const clsLabels = ["CLS\u2081", "CLS\u2082", "CLS\u2083", "CLS\u2084"];
+  const featureLabels = ["x\u2081", "x\u2082"];
+  const nodeCount = clsLabels.length + featureLabels.length;
   const allLabels = [...clsLabels, ...featureLabels];
 
   const positions = [];
@@ -318,9 +280,9 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
   }
 
   const connections = [
-    [0, 2], [0, 3], [0, 4], [0, 5],
-    [1, 2], [1, 3], [1, 4], [1, 5],
-    [2, 3], [3, 4], [4, 5], [2, 5],
+    [0, 4], [0, 5], [1, 4], [1, 5],
+    [2, 4], [2, 5], [3, 4], [3, 5],
+    [4, 5],
   ];
 
   let started = false;
@@ -365,7 +327,7 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
 
     for (let i = 0; i < nodeCount; i++) {
       const p = positions[i];
-      const isCLS = i < clsLabels.length;
+      const isCLS = i < 4;
       const nodeDelay = i * 0.06;
       const progress = Math.min(1, Math.max(0, (elapsed - nodeDelay) / 0.45));
       const t = easeOut(progress);
@@ -399,7 +361,7 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
       const aggY = centerY + 80;
       ctx.globalAlpha = t;
 
-      for (let i = 0; i < clsLabels.length; i++) {
+      for (let i = 0; i < 4; i++) {
         const p = positions[i];
         ctx.beginPath();
         ctx.setLineDash([4, 4]);
@@ -411,9 +373,9 @@ document.querySelectorAll(".s1-inject, .icl-vis, .pipeline").forEach((el) =>
         ctx.setLineDash([]);
       }
 
-      const aggW = 140;
+      const aggW = 180;
       const aggH = 32;
-      const aggX = (positions[0].x + positions[1].x) / 2 - aggW / 2;
+      const aggX = (positions[0].x + positions[3].x) / 2 - aggW / 2;
       ctx.beginPath();
       ctx.roundRect(aggX, aggY - aggH / 2, aggW, aggH, 8);
       ctx.fillStyle = "#e8f0fe";

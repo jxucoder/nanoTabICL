@@ -112,240 +112,828 @@
         <p class="stage-label reveal">Stage 1</p>
         <h2 class="sect-title reveal">Understand each feature.</h2>
         <p class="sect-sub reveal">
-          Each feature column is processed independently through a shared
-          set-attention encoder. Labels are injected into training rows
-          so every embedding becomes target-aware.
+          Let's trace one cell through the full column-embedding pipeline
+          step by step, using a tiny concrete example.
         </p>
       </div>
 
-      <!-- 1a  Column-by-column -->
-      <div class="wrap s1-card reveal">
-        <div class="s1-split">
-          <div class="s1-text">
-            <h3>Column-by-column</h3>
-            <p>
-              Unlike most models that see all features at once, TabICLv2
-              treats each column as an independent set of values. A single
-              shared encoder processes every column the same way.
-            </p>
-            <p>
-              Think of it like reading one column of a spreadsheet at a
-              time — learning each feature's distribution before
-              combining them later in Stage 2.
-            </p>
-          </div>
-          <div class="s1-vis" aria-hidden="true">
-            <div class="s1-table" id="s1-table">
-              <div class="s1t-head"><span>x<sub>1</sub></span><span>x<sub>2</sub></span><span>x<sub>3</sub></span><span>x<sub>4</sub></span></div>
-              <div class="s1t-row"><span>0.3</span><span>&minus;1.2</span><span>0.8</span><span>&minus;0.5</span></div>
-              <div class="s1t-row"><span>-0.7</span><span>0.4</span><span>1.1</span><span>0.2</span></div>
-              <div class="s1t-row"><span>1.5</span><span>&minus;0.3</span><span>&minus;0.6</span><span>0.9</span></div>
-              <div class="s1t-row"><span>0.1</span><span>0.8</span><span>&minus;0.2</span><span>&minus;1.1</span></div>
-              <div class="s1t-row"><span>&minus;0.4</span><span>1.6</span><span>0.3</span><span>0.7</span></div>
-              <div class="s1t-proc">
-                <svg viewBox="0 0 24 24" fill="none"><path d="M12 2v4m0 12v4M2 12h4m12 0h4m-3.5-7.5L16 7m-8 10l-2.5 2.5M20.5 18.5L18 16M7 7L4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                <span>Shared ISAB</span>
-              </div>
+      <div class="wrap">
+        <div class="walk" id="walk">
+
+          <!-- Step 0 ── the example ──────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">0</div>
+            <div class="walk-body">
+              <h3>Our example</h3>
+              <p>A tiny table: 3 rows, 2 features, binary labels. The first two rows are <strong>training</strong> (labeled), the last is a <strong>test</strong> row (unlabeled). We'll follow the highlighted cell
+                <span class="hl-val">0.3</span> through every operation.
+              </p>
+              <table class="walk-table">
+                <thead><tr><th></th><th>x<sub>1</sub></th><th>x<sub>2</sub></th><th>y</th></tr></thead>
+                <tbody>
+                  <tr class="wt-train"><td>train</td><td class="wt-hl">0.3</td><td>&minus;1.2</td><td>0</td></tr>
+                  <tr class="wt-train"><td>train</td><td>&minus;0.7</td><td>0.4</td><td>1</td></tr>
+                  <tr class="wt-test"><td>test</td><td>0.1</td><td>0.8</td><td>?</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- 1b  Label injection -->
-      <div class="wrap s1-card reveal">
-        <div class="s1-split s1-split--rev">
-          <div class="s1-text">
-            <h3>Target-aware embeddings</h3>
-            <p>
-              Each scalar value is linearly projected from 1 dimension
-              to <strong>d&thinsp;=&thinsp;64</strong> dimensions.
-              For training rows, a label encoding is added element-wise
-              before any attention happens.
-            </p>
-            <p>
-              The label is one-hot encoded (e.g. <code>[1, 0, 0, &hellip;]</code>
-              for class 0) and projected through its own learned linear layer
-              to the same 64-dim space, then added to the value embedding.
-            </p>
-            <p>
-              Test rows skip this step entirely — they carry only the
-              raw projected value. This asymmetry is what lets the model
-              learn from labeled context later in Stage 3.
-            </p>
-          </div>
-          <div class="s1-vis" aria-hidden="true">
-            <div class="s1-inject" id="s1-inject">
-
-              <p class="s1i-title">Train row (label injected)</p>
-              <div class="s1i-example" style="--i:0">
-                <div class="s1i-step">
-                  <span class="s1i-dim">scalar</span>
-                  <span class="s1i-val">0.3</span>
+          <!-- Step 1 ── isolate columns ──────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">1</div>
+            <div class="walk-body">
+              <h3>Isolate each column</h3>
+              <p>
+                The table is transposed so each feature column becomes
+                its own independent group. Columns never see each other
+                during Stage 1 — they share the same encoder weights but
+                are processed separately.
+              </p>
+              <div class="walk-cols">
+                <div class="walk-col">
+                  <p class="walk-col-hd">Column x<sub>1</sub></p>
+                  <span class="wc-cell wc-hl">0.3</span>
+                  <span class="wc-cell">&minus;0.7</span>
+                  <span class="wc-cell wc-test">0.1</span>
                 </div>
-                <span class="s1i-arr">&rarr;</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">Linear(1, 64)</span>
-                  <span class="s1i-vec">[&thinsp;0.12,&ensp;&minus;0.41,&ensp;0.08,&ensp;&hellip;&ensp;]</span>
-                </div>
-                <span class="s1i-op">+</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">one-hot &rarr; Linear(C, 64)</span>
-                  <span class="s1i-vec s1i-vec--label">[&thinsp;0.05,&ensp;0.33,&ensp;&minus;0.17,&ensp;&hellip;&ensp;]<sub class="s1i-badge tag-0">y=0</sub></span>
-                </div>
-                <span class="s1i-arr">&rarr;</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">64-dim</span>
-                  <span class="s1i-vec s1i-vec--out">[&thinsp;0.17,&ensp;&minus;0.08,&ensp;&minus;0.09,&ensp;&hellip;&ensp;]</span>
+                <div class="walk-col">
+                  <p class="walk-col-hd">Column x<sub>2</sub></p>
+                  <span class="wc-cell">&minus;1.2</span>
+                  <span class="wc-cell">0.4</span>
+                  <span class="wc-cell wc-test">0.8</span>
                 </div>
               </div>
-
-              <div class="s1i-example" style="--i:1">
-                <div class="s1i-step">
-                  <span class="s1i-dim">scalar</span>
-                  <span class="s1i-val">&minus;0.7</span>
-                </div>
-                <span class="s1i-arr">&rarr;</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">Linear(1, 64)</span>
-                  <span class="s1i-vec">[&minus;0.29,&ensp;0.96,&ensp;&minus;0.18,&ensp;&hellip;&ensp;]</span>
-                </div>
-                <span class="s1i-op">+</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">one-hot &rarr; Linear(C, 64)</span>
-                  <span class="s1i-vec s1i-vec--label">[&minus;0.22,&ensp;0.14,&ensp;0.51,&ensp;&hellip;&ensp;]<sub class="s1i-badge tag-1">y=1</sub></span>
-                </div>
-                <span class="s1i-arr">&rarr;</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">64-dim</span>
-                  <span class="s1i-vec s1i-vec--out">[&minus;0.51,&ensp;1.10,&ensp;0.33,&ensp;&hellip;&ensp;]</span>
-                </div>
-              </div>
-
-              <p class="s1i-title" style="margin-top:1rem">Test row (no label)</p>
-              <div class="s1i-example s1i-example--test" style="--i:2">
-                <div class="s1i-step">
-                  <span class="s1i-dim">scalar</span>
-                  <span class="s1i-val">0.1</span>
-                </div>
-                <span class="s1i-arr">&rarr;</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">Linear(1, 64)</span>
-                  <span class="s1i-vec">[&thinsp;0.04,&ensp;&minus;0.14,&ensp;0.03,&ensp;&hellip;&ensp;]</span>
-                </div>
-                <span class="s1i-arr">&rarr;</span>
-                <div class="s1i-step">
-                  <span class="s1i-dim">64-dim</span>
-                  <span class="s1i-vec s1i-vec--plain">[&thinsp;0.04,&ensp;&minus;0.14,&ensp;0.03,&ensp;&hellip;&ensp;]</span>
-                </div>
-              </div>
-              <p class="s1i-note">Same values in, same values out — no label information added.</p>
-
+              <p class="walk-aside">
+                From here on we follow <strong>column x<sub>1</sub></strong> only.
+                Column x<sub>2</sub> goes through the exact same steps in parallel.
+              </p>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- 1c  ISAB flow -->
-      <div class="wrap s1-card reveal">
-        <div class="s1-split">
-          <div class="s1-text">
-            <h3>Set attention (ISAB)</h3>
-            <p>
-              The Induced Self-Attention Block compresses information in
-              two steps: column values attend to a small set of learned
-              <strong>inducing points</strong>, then the inducing points
-              attend back to every value.
-            </p>
-            <p>
-              This is more efficient than full pairwise attention and
-              captures the complete column distribution — mean, variance,
-              shape — in a compact representation.
-            </p>
+          <!-- Step 2 ── project scalar to vector ─────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">2</div>
+            <div class="walk-body">
+              <h3>Project each scalar to 64 dimensions</h3>
+              <p>
+                A learned linear layer <code>Linear(1, 64)</code> maps
+                every single number to a 64-dimensional vector.
+                This is the same layer for every cell in every column.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-in wf-hl">0.3</span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-lbl">Linear(1,&thinsp;64)</span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-vec">[&thinsp;0.12,&ensp;&minus;0.41,&ensp;0.08,&ensp;&hellip;&ensp;]<sub class="wf-dim">64 numbers</sub></span>
+                </div>
+                <div class="wf-row">
+                  <span class="wf-in">&minus;0.7</span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-lbl">Linear(1,&thinsp;64)</span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-vec">[&minus;0.29,&ensp;0.96,&ensp;&minus;0.18,&ensp;&hellip;&ensp;]<sub class="wf-dim">64</sub></span>
+                </div>
+                <div class="wf-row wf-row--test">
+                  <span class="wf-in">0.1</span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-lbl">Linear(1,&thinsp;64)</span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-vec wf-vec--muted">[&thinsp;0.04,&ensp;&minus;0.14,&ensp;0.03,&ensp;&hellip;&ensp;]<sub class="wf-dim">64</sub></span>
+                </div>
+              </div>
+              <p class="walk-aside">
+                Same weights, different inputs &rarr; different vectors.
+                At this point the vectors carry no label information.
+              </p>
+            </div>
           </div>
-          <div class="s1-vis" aria-hidden="true">
-            <canvas id="s1-isab" width="440" height="260"></canvas>
+
+          <!-- Step 3 ── add label encoding ───────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">3</div>
+            <div class="walk-body">
+              <h3>Add label encoding (train rows only)</h3>
+              <p>
+                The label is one-hot encoded, then projected to 64 dims
+                through a separate learned layer
+                <code>Linear(C,&thinsp;64)</code>. This label vector is
+                <strong>added element-wise</strong> to the value
+                projection. Test rows skip this — no label to add.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-vec wf-vec--sm">[&thinsp;0.12, &minus;0.41, &hellip;&thinsp;]</span>
+                  <span class="wf-op">+</span>
+                  <div class="wf-label-box">
+                    <span class="wf-tag tag-0">y=0</span>
+                    <span class="wf-sub">[1,0,&hellip;] &rarr; Linear(C,64)</span>
+                    <span class="wf-vec wf-vec--sm wf-vec--lbl">[&thinsp;0.05, 0.33, &hellip;&thinsp;]</span>
+                  </div>
+                  <span class="wf-arrow">=</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;0.17, &minus;0.08, &hellip;&thinsp;]</span>
+                </div>
+                <div class="wf-row">
+                  <span class="wf-vec wf-vec--sm">[&minus;0.29, 0.96, &hellip;&thinsp;]</span>
+                  <span class="wf-op">+</span>
+                  <div class="wf-label-box">
+                    <span class="wf-tag tag-1">y=1</span>
+                    <span class="wf-sub">[0,1,&hellip;] &rarr; Linear(C,64)</span>
+                    <span class="wf-vec wf-vec--sm wf-vec--lbl">[&minus;0.22, 0.14, &hellip;&thinsp;]</span>
+                  </div>
+                  <span class="wf-arrow">=</span>
+                  <span class="wf-vec wf-vec--accent">[&minus;0.51, 1.10, &hellip;&thinsp;]</span>
+                </div>
+                <div class="wf-row wf-row--test">
+                  <span class="wf-vec wf-vec--sm wf-vec--muted">[&thinsp;0.04, &minus;0.14, &hellip;&thinsp;]</span>
+                  <span class="wf-skip">no label &rarr; unchanged</span>
+                  <span class="wf-vec wf-vec--muted">[&thinsp;0.04, &minus;0.14, &hellip;&thinsp;]</span>
+                </div>
+              </div>
+              <p class="walk-aside">
+                The same label vector is added to every feature column
+                for that row, so x<sub>2</sub> gets the same y=0 / y=1
+                encoding added.
+              </p>
+            </div>
           </div>
+
+          <!-- Step 4 ── ISAB ─────────────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">4</div>
+            <div class="walk-body">
+              <h3>Let every value see the rest of the column (ISAB)</h3>
+
+              <p>
+                Right now each of our 3 vectors was built in isolation &mdash;
+                the vector for 0.3 knows nothing about &minus;0.7 or 0.1.
+                We want each vector to be <em>aware of the other values
+                in the same column</em>, so the model understands the
+                feature's distribution (range, spread, outliers).
+              </p>
+
+              <p class="walk-key" style="margin-top:.8rem">
+                <strong>"Attend to"</strong> means: look at another
+                vector, decide how relevant it is (a weight between 0
+                and 1), then mix a weighted combination of it into
+                yourself. It's the same Query-Key-Value mechanism used
+                in transformers and LLMs &mdash; applied here to the
+                values within a single column.
+              </p>
+
+              <h4 style="margin-top:1.1rem">Concrete example &mdash; what happens to the vector for 0.3</h4>
+              <p>
+                If we did plain self-attention, 0.3's vector would look
+                at the vectors for &minus;0.7 and 0.1, compute a
+                similarity score with each (via dot product), turn those
+                scores into weights (via softmax), and add a weighted
+                mix of their values into itself. After that, 0.3's
+                vector "knows" it sits in a column whose values range
+                from &minus;0.7 to 0.3, that the spread is moderate,
+                etc.
+              </p>
+
+              <h4 style="margin-top:1.1rem">Why not just do that directly?</h4>
+              <p>
+                We could, but with many rows it's expensive &mdash;
+                every value would look at every other value
+                (n&sup2; pairs). Instead, ISAB introduces a small set
+                of <strong>inducing points</strong>.
+              </p>
+
+              <h4 style="margin-top:1.1rem">What are inducing points?</h4>
+              <p>
+                They are a fixed number of learnable vectors
+                (I<sub>1</sub>, I<sub>2</sub>, I<sub>3</sub>) that are
+                <strong>part of the model's weights</strong>, just like
+                the weights in a linear layer. They start random and are
+                updated during pretraining via backpropagation.
+              </p>
+              <p>
+                Think of them as <em>learned questions</em> that the
+                model asks about any column it sees:
+              </p>
+              <ul class="walk-ol" style="list-style:none;padding-left:.5rem">
+                <li>I<sub>1</sub> might learn to ask "what is the mean
+                    of this column?"</li>
+                <li>I<sub>2</sub> might learn to ask "how spread out are
+                    the values?"</li>
+                <li>I<sub>3</sub> might learn to ask "do the y=0 and
+                    y=1 values cluster separately?"</li>
+              </ul>
+              <p>
+                We don't hand-design these questions &mdash; the model
+                discovers what's useful during training.
+              </p>
+
+              <h4 style="margin-top:1.1rem">The two-step process</h4>
+              <ol class="walk-ol">
+                <li>
+                  <strong>Step A &mdash; inducing points read the column.</strong>
+                  Each I<sub>k</sub> attends to all 3 column values
+                  [0.3, &minus;0.7, 0.1]. It computes attention weights
+                  (e.g. I<sub>1</sub> might put weight 0.5 on 0.3,
+                  0.3 on &minus;0.7, 0.2 on 0.1) and produces a
+                  weighted mixture. After this step, each inducing point
+                  holds a specific summary of the column.
+                </li>
+                <li>
+                  <strong>Step B &mdash; column values read the summaries back.</strong>
+                  Now each original value attends to the 3 inducing
+                  points. The vector for 0.3 looks at I<sub>1</sub>,
+                  I<sub>2</sub>, I<sub>3</sub>, decides which summaries
+                  are most relevant to it, and mixes them into itself.
+                </li>
+              </ol>
+              <p>
+                After both steps, every vector is enriched with
+                information about the full column. The total cost is
+                only n&times;m attention pairs (3&times;3 = 9 here)
+                instead of n&sup2; (9) &mdash; the savings grow with
+                larger tables.
+              </p>
+
+              <div class="walk-isab-wrap" aria-hidden="true">
+                <canvas id="s1-isab" width="440" height="260"></canvas>
+              </div>
+
+              <h4 style="margin-top:1.1rem">What changed?</h4>
+              <p>
+                Before ISAB, the vector for 0.3 only encoded "I am the
+                value 0.3 and my row has label y=0." After ISAB, it also
+                encodes "I'm in a column whose values range from
+                &minus;0.7 to 0.3, the y=0 row has the largest value,
+                and the y=1 row has the smallest." This distribution
+                awareness is what makes the final embedding useful.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 5 ── affine output ────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">5</div>
+            <div class="walk-body">
+              <h3>Compute learned scale and bias</h3>
+              <p>
+                The ISAB output is <strong>not</strong> used directly as
+                the embedding. Instead, two separate projections convert
+                it into per-value <em>scale</em> (W) and <em>bias</em>
+                parameters:
+              </p>
+              <pre class="walk-code"><code>W    = LayerNorm( Linear( ISAB_output ) )   &larr; scale
+bias = LayerNorm( Linear( ISAB_output ) )   &larr; shift</code></pre>
+              <p>
+                These are 64-dim vectors — one W and one bias for each
+                cell in the table. They encode what the ISAB learned
+                about the column distribution and the labels.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 6 ── final embedding ──────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">6</div>
+            <div class="walk-body">
+              <h3>Final embedding = value &times; scale + bias</h3>
+              <p>
+                The original scalar value is multiplied element-wise by
+                the learned scale and the learned bias is added. This
+                produces the final 64-dim column embedding for each cell.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-in wf-hl">0.3</span>
+                  <span class="wf-op">&times;</span>
+                  <span class="wf-vec wf-vec--sm">[&thinsp;0.8, 1.1, &minus;0.3, &hellip;&thinsp;]<sub class="wf-dim">W</sub></span>
+                  <span class="wf-op">+</span>
+                  <span class="wf-vec wf-vec--sm">[&thinsp;0.1, &minus;0.2, 0.5, &hellip;&thinsp;]<sub class="wf-dim">bias</sub></span>
+                  <span class="wf-arrow">=</span>
+                  <span class="wf-vec wf-vec--final">[&thinsp;0.34, 0.13, 0.41, &hellip;&thinsp;]<sub class="wf-dim">64-dim embedding</sub></span>
+                </div>
+              </div>
+              <p class="walk-key">
+                Key insight: the embedding preserves the original value
+                but modulates it based on what the ISAB learned about
+                the column distribution and the training labels.
+                Different columns get different W and bias even though
+                they share the same encoder.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 7 ── result ───────────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">&#10003;</div>
+            <div class="walk-body walk-body--done">
+              <h3>Result of Stage 1</h3>
+              <p>
+                Every single cell in the original table is now a
+                <strong>64-dimensional vector</strong>. The table went from
+                shape <code>(3 rows, 2 features)</code> to
+                <code>(3 rows, 2 features, 64 dims)</code>.
+              </p>
+              <table class="walk-table walk-table--result">
+                <thead><tr><th></th><th>x<sub>1</sub> embedding</th><th>x<sub>2</sub> embedding</th></tr></thead>
+                <tbody>
+                  <tr class="wt-train"><td>train</td><td class="wt-emb">[0.34, 0.13, 0.41, &hellip;]</td><td class="wt-emb">[&minus;0.18, 0.72, 0.05, &hellip;]</td></tr>
+                  <tr class="wt-train"><td>train</td><td class="wt-emb">[&minus;0.61, 0.89, &minus;0.22, &hellip;]</td><td class="wt-emb">[0.44, &minus;0.31, 0.67, &hellip;]</td></tr>
+                  <tr class="wt-test"><td>test</td><td class="wt-emb">[0.11, &minus;0.07, 0.48, &hellip;]</td><td class="wt-emb">[0.39, 0.55, &minus;0.14, &hellip;]</td></tr>
+                </tbody>
+              </table>
+              <p class="walk-aside">
+                These embeddings flow into Stage 2, where features within
+                each row will interact for the first time.
+              </p>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
 
     <!-- ─── Stage 2 ─── -->
     <section class="sect sect--dark" id="stage2">
-      <div class="wrap stage-row reverse">
-        <div class="stage-text reveal">
-          <p class="stage-label">Stage 2</p>
-          <h2>Features talk to each other.</h2>
-          <p>
-            Within every row, the column embeddings interact through
-            transformer self-attention blocks so the model can capture
-            cross-feature relationships.
-          </p>
-          <p>
-            Learnable <strong>CLS tokens</strong> attend to all features
-            and compress each row into a fixed-size representation.
-          </p>
-        </div>
-        <div class="stage-vis reveal" aria-hidden="true">
-          <canvas id="attn-canvas" width="360" height="280"></canvas>
+      <div class="wrap narrow">
+        <p class="stage-label reveal">Stage 2</p>
+        <h2 class="sect-title reveal">Features talk to each other.</h2>
+        <p class="sect-sub reveal">
+          Until now, x<sub>1</sub> and x<sub>2</sub> have been processed
+          separately. Stage 2 lets the feature embeddings within each
+          row interact, then compresses each row into a single vector.
+        </p>
+      </div>
+
+      <div class="wrap">
+        <div class="walk walk--dark" id="walk2">
+
+          <!-- Step 0 ── input ──────────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">0</div>
+            <div class="walk-body walk-body--dark">
+              <h3>Input from Stage 1</h3>
+              <p>
+                Each row now has one 64-dim embedding per feature.
+                We'll follow <strong>row 1</strong> (train, y=0).
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row wf-row--dark">
+                  <span class="wf-lbl">Row 1</span>
+                  <span class="wf-vec wf-vec--accent">x<sub>1</sub> emb<sub class="wf-dim">64</sub></span>
+                  <span class="wf-vec wf-vec--accent">x<sub>2</sub> emb<sub class="wf-dim">64</sub></span>
+                </div>
+              </div>
+              <p class="walk-aside walk-aside--dark">
+                Each row is processed independently &mdash; rows don't
+                see each other yet (that happens in Stage 3).
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 1 ── prepend CLS ────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">1</div>
+            <div class="walk-body walk-body--dark">
+              <h3>Prepend learnable CLS tokens</h3>
+              <p>
+                4 learnable vectors (CLS<sub>1</sub>&ndash;CLS<sub>4</sub>)
+                are prepended to the feature embeddings. Like inducing
+                points in Stage 1, these are <strong>part of the model's
+                weights</strong> &mdash; they start random and are
+                trained via backpropagation.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row wf-row--dark">
+                  <span class="wf-vec wf-vec--cls">CLS<sub>1</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>2</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>3</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>4</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-vec wf-vec--accent">x<sub>1</sub> emb</span>
+                  <span class="wf-vec wf-vec--accent">x<sub>2</sub> emb</span>
+                </div>
+              </div>
+              <p>
+                The row now has <strong>6 tokens</strong>: 4 CLS + 2
+                features, each a 64-dim vector.
+              </p>
+              <p class="walk-aside walk-aside--dark">
+                Why 4 CLS tokens instead of 1? Multiple CLS tokens
+                let the model capture different aspects of the row
+                (think: one might focus on feature magnitudes, another
+                on feature interactions). Their outputs are concatenated
+                later.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 2 ── self-attention ─────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">2</div>
+            <div class="walk-body walk-body--dark">
+              <h3>Self-attention: every token sees every token</h3>
+              <p>
+                All 6 tokens go through a standard transformer block
+                (self-attention + feed-forward). Every token attends to
+                every other token in the same row.
+              </p>
+              <div class="walk-isab-wrap" aria-hidden="true">
+                <canvas id="attn-canvas" width="360" height="280"></canvas>
+              </div>
+              <p>
+                What this does concretely for our example:
+              </p>
+              <ul class="walk-ol">
+                <li>
+                  The x<sub>1</sub> embedding attends to x<sub>2</sub>.
+                  If x<sub>1</sub> and x<sub>2</sub> are correlated
+                  (they are &mdash; the synthetic prior generates
+                  correlated features), the attention weight will be
+                  high, and x<sub>1</sub>'s vector will absorb
+                  information about x<sub>2</sub>.
+                </li>
+                <li>
+                  Each CLS token attends to both features, picking up
+                  a weighted summary of the row's content.
+                </li>
+              </ul>
+              <p class="walk-aside walk-aside--dark">
+                After this block, x<sub>1</sub>'s embedding no longer
+                represents just "feature 1" &mdash; it also knows about
+                feature 2. Cross-feature relationships (e.g.
+                "x<sub>1</sub> is high while x<sub>2</sub> is low")
+                are now encoded.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 3 ── CLS cross-attention ───────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">3</div>
+            <div class="walk-body walk-body--dark">
+              <h3>CLS tokens aggregate the row</h3>
+              <p>
+                A final transformer block runs, but only the
+                <strong>4 CLS tokens are updated</strong>. They attend
+                to all 6 tokens (CLS + features) as context, but the
+                feature tokens are not updated.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row wf-row--dark">
+                  <span class="wf-lbl wf-lbl--dark">queries</span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>1</sub></span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>2</sub></span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>3</sub></span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>4</sub></span>
+                </div>
+                <div class="wf-row wf-row--dark" style="margin-top:.3rem">
+                  <span class="wf-lbl wf-lbl--dark">keys/values</span>
+                  <span class="wf-vec wf-vec--cls" style="opacity:.6">CLS<sub>1</sub></span>
+                  <span class="wf-vec wf-vec--cls" style="opacity:.6">CLS<sub>2</sub></span>
+                  <span class="wf-vec wf-vec--cls" style="opacity:.6">CLS<sub>3</sub></span>
+                  <span class="wf-vec wf-vec--cls" style="opacity:.6">CLS<sub>4</sub></span>
+                  <span class="wf-vec wf-vec--accent">x<sub>1</sub></span>
+                  <span class="wf-vec wf-vec--accent">x<sub>2</sub></span>
+                </div>
+              </div>
+              <p>
+                This is cross-attention: the CLS tokens are the queries,
+                all 6 tokens are keys and values. Each CLS token
+                produces a final 64-dim summary of the row.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 4 ── concatenate ────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">4</div>
+            <div class="walk-body walk-body--dark">
+              <h3>Concatenate CLS outputs</h3>
+              <p>
+                The 4 CLS outputs (each 64-dim) are concatenated into a
+                single vector and passed through LayerNorm.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row wf-row--dark">
+                  <span class="wf-vec wf-vec--cls">CLS<sub>1</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-op" style="color:#a1a1a6">&oplus;</span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>2</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-op" style="color:#a1a1a6">&oplus;</span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>3</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-op" style="color:#a1a1a6">&oplus;</span>
+                  <span class="wf-vec wf-vec--cls">CLS<sub>4</sub><sub class="wf-dim">64</sub></span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-vec wf-vec--final">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256-dim row vector</sub></span>
+                </div>
+              </div>
+              <p>
+                4 &times; 64 = <strong>256 dimensions</strong>.
+                The feature embeddings are discarded &mdash; all
+                information is now compressed into this single row
+                vector.
+              </p>
+            </div>
+          </div>
+
+          <!-- Result ──────────────────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">&#10003;</div>
+            <div class="walk-body walk-body--dark walk-body--done-dark">
+              <h3>Result of Stage 2</h3>
+              <p>
+                Every row is now a single <strong>256-dim vector</strong>
+                that encodes all its features and their interactions.
+                The table went from
+                <code>(3 rows, 2 features, 64 dims)</code> to
+                <code>(3 rows, 256 dims)</code>.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row wf-row--dark">
+                  <span class="wf-lbl wf-lbl--dark">Row 1</span>
+                  <span class="wf-vec wf-vec--final">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  <span class="wf-skip" style="background:rgba(255,255,255,.1);color:#a1a1a6">train, y=0</span>
+                </div>
+                <div class="wf-row wf-row--dark">
+                  <span class="wf-lbl wf-lbl--dark">Row 2</span>
+                  <span class="wf-vec wf-vec--final">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  <span class="wf-skip" style="background:rgba(255,255,255,.1);color:#a1a1a6">train, y=1</span>
+                </div>
+                <div class="wf-row wf-row--dark">
+                  <span class="wf-lbl wf-lbl--dark">Row 3</span>
+                  <span class="wf-vec wf-vec--final">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  <span class="wf-skip" style="background:rgba(255,255,255,.1);color:#a1a1a6">test, y=?</span>
+                </div>
+              </div>
+              <p class="walk-aside walk-aside--dark">
+                These 3 row vectors flow into Stage 3, where the test
+                row will attend to the training rows to make a
+                prediction.
+              </p>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
 
     <!-- ─── Stage 3 ─── -->
     <section class="sect" id="stage3">
-      <div class="wrap stage-row">
-        <div class="stage-text reveal">
-          <p class="stage-label">Stage 3</p>
-          <h2>Learn from context.</h2>
-          <p>
-            A row-level transformer lets each test row attend exclusively
-            to the labeled training rows — just like how an LLM attends to
-            earlier tokens.
-          </p>
-          <p>
-            An MLP decoder converts the attended representation into
-            final predictions. No gradient update happens — this is pure
-            <strong>in-context learning</strong>.
-          </p>
-        </div>
-        <div class="stage-vis reveal" aria-hidden="true">
-          <div class="icl-vis" id="icl-vis">
-            <div class="icl-col icl-ctx">
-              <p class="icl-heading">Context (train)</p>
-              <div class="icl-row" style="--i:0"><span class="icl-dot ctx"></span> row 1 &nbsp;<small>y=0</small></div>
-              <div class="icl-row" style="--i:1"><span class="icl-dot ctx"></span> row 2 &nbsp;<small>y=1</small></div>
-              <div class="icl-row" style="--i:2"><span class="icl-dot ctx"></span> row 3 &nbsp;<small>y=1</small></div>
-              <div class="icl-row" style="--i:3"><span class="icl-dot ctx"></span> row 4 &nbsp;<small>y=0</small></div>
-            </div>
-            <div class="icl-arrows" id="icl-arrows">
-              <svg viewBox="0 0 80 200" preserveAspectRatio="none">
-                <path class="icl-path" d="M0,25 C40,25 40,40 80,40" />
-                <path class="icl-path" d="M0,65 C40,65 40,70 80,70" />
-                <path class="icl-path" d="M0,105 C40,105 40,100 80,100" />
-                <path class="icl-path" d="M0,145 C40,145 40,130 80,130" />
-              </svg>
-            </div>
-            <div class="icl-col icl-query">
-              <p class="icl-heading">Query (test)</p>
-              <div class="icl-row" style="--i:0"><span class="icl-dot query"></span> row 5 &nbsp;<small>? &rarr; <strong class="icl-pred">1</strong></small></div>
+      <div class="wrap narrow">
+        <p class="stage-label reveal">Stage 3</p>
+        <h2 class="sect-title reveal">Learn from context.</h2>
+        <p class="sect-sub reveal">
+          This is where in-context learning happens. The test row looks
+          at the labeled training rows &mdash; like reading examples
+          before answering a question &mdash; and produces a prediction
+          without any gradient update.
+        </p>
+      </div>
+
+      <div class="wrap">
+        <div class="walk" id="walk3">
+
+          <!-- Step 0 ── input ──────────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">0</div>
+            <div class="walk-body">
+              <h3>Input from Stage 2</h3>
+              <p>
+                Three 256-dim row vectors. The model doesn't know
+                which rows are train or test yet &mdash; they're
+                just vectors in a sequence.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-lbl">Row 1</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  <span class="wf-skip" style="font-size:.72rem">train</span>
+                </div>
+                <div class="wf-row">
+                  <span class="wf-lbl">Row 2</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  <span class="wf-skip" style="font-size:.72rem">train</span>
+                </div>
+                <div class="wf-row wf-row--test">
+                  <span class="wf-lbl">Row 3</span>
+                  <span class="wf-vec wf-vec--muted">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  <span class="wf-skip" style="font-size:.72rem">test</span>
+                </div>
+              </div>
             </div>
           </div>
+
+          <!-- Step 1 ── add labels again ───────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">1</div>
+            <div class="walk-body">
+              <h3>Add label encoding to train rows (again)</h3>
+              <p>
+                Just like in Stage 1, the training labels are one-hot
+                encoded, projected to 256 dims via a <em>new</em>
+                learned linear layer
+                <code>Linear(C,&thinsp;256)</code>, and added
+                element-wise to the train row vectors.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-lbl">Row 1</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;&hellip;&thinsp;]</span>
+                  <span class="wf-op">+</span>
+                  <div class="wf-label-box">
+                    <span class="wf-tag tag-0">y=0</span>
+                    <span class="wf-vec wf-vec--sm wf-vec--lbl">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  </div>
+                  <span class="wf-arrow">=</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;&hellip;&thinsp;]</span>
+                </div>
+                <div class="wf-row">
+                  <span class="wf-lbl">Row 2</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;&hellip;&thinsp;]</span>
+                  <span class="wf-op">+</span>
+                  <div class="wf-label-box">
+                    <span class="wf-tag tag-1">y=1</span>
+                    <span class="wf-vec wf-vec--sm wf-vec--lbl">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  </div>
+                  <span class="wf-arrow">=</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;&hellip;&thinsp;]</span>
+                </div>
+                <div class="wf-row wf-row--test">
+                  <span class="wf-lbl">Row 3</span>
+                  <span class="wf-vec wf-vec--muted">[&thinsp;&hellip;&thinsp;]</span>
+                  <span class="wf-skip">no label &rarr; unchanged</span>
+                </div>
+              </div>
+              <p class="walk-aside">
+                Why add labels a second time? Stage 1 labels were
+                injected per-column before set attention. Here, labels
+                are injected into the full row representation before
+                row-level attention. Both injections use separately
+                learned projections.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 2 ── masked attention ────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">2</div>
+            <div class="walk-body">
+              <h3>Attention: test rows can only see train rows</h3>
+              <p>
+                The 3 row vectors go through <strong>3 transformer
+                blocks</strong>, but with a crucial constraint: the
+                keys and values are always the <strong>train rows
+                only</strong>.
+              </p>
+
+              <p class="walk-key">
+                This means every row &mdash; including the test row
+                &mdash; attends exclusively to the 2 labeled training
+                rows. The test row can never attend to itself.
+              </p>
+
+              <h4 style="margin-top:1rem">What does this look like concretely?</h4>
+              <p>
+                In each block, the test row (Row 3) computes attention
+                over the 2 training rows:
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-lbl">Row 3 (query)</span>
+                  <span class="wf-arrow">attends to</span>
+                  <span class="wf-vec wf-vec--accent">Row 1<sub class="wf-dim">y=0</sub></span>
+                  <span class="wf-vec wf-vec--accent">Row 2<sub class="wf-dim">y=1</sub></span>
+                </div>
+              </div>
+              <p>
+                The attention weights might look like:
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-lbl">weights</span>
+                  <span class="wf-vec" style="min-width:80px;text-align:center">Row 1: <strong>0.35</strong></span>
+                  <span class="wf-vec" style="min-width:80px;text-align:center">Row 2: <strong>0.65</strong></span>
+                </div>
+              </div>
+              <p>
+                Row 3 is more similar to Row 2, so it assigns higher
+                weight there. The output is a weighted mixture:
+                0.35&thinsp;&times;&thinsp;Row&thinsp;1 +
+                0.65&thinsp;&times;&thinsp;Row&thinsp;2 (plus the
+                feed-forward network on top).
+              </p>
+              <p>
+                This happens 3 times (3 blocks), each refining the
+                representation. After all blocks, the test row's vector
+                is heavily shaped by the training rows it attended to.
+              </p>
+
+              <p class="walk-key">
+                <strong>This is the in-context learning.</strong>
+                The model figures out which training examples are most
+                relevant to the test row and blends their information
+                &mdash; including their labels &mdash; into the test
+                row's representation. No gradients. No weight updates.
+                Pure attention.
+              </p>
+
+              <h4 style="margin-top:1rem">Why is this like an LLM?</h4>
+              <p>
+                In a language model, each new token can only attend to
+                previous tokens (causal mask). Here, the test row can
+                only attend to training rows. The labeled training
+                data is the "prompt," and the test row is the "next
+                token" being predicted from context.
+              </p>
+            </div>
+          </div>
+
+          <!-- Step 3 ── MLP decoder ────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">3</div>
+            <div class="walk-body">
+              <h3>MLP decoder: vector &rarr; prediction</h3>
+              <p>
+                After the 3 attention blocks, only the <strong>test
+                row's vector</strong> is kept. It goes through
+                LayerNorm and a two-layer MLP:
+              </p>
+              <pre class="walk-code"><code>Linear(256, 512) &rarr; GELU &rarr; Linear(512, C)</code></pre>
+              <p>
+                For binary classification (C=2, or in practice
+                max_classes=10), the output is a vector of
+                <strong>logits</strong> &mdash; one raw score per class.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-lbl">Row 3</span>
+                  <span class="wf-vec wf-vec--accent">[&thinsp;&hellip;&thinsp;]<sub class="wf-dim">256</sub></span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-lbl">MLP</span>
+                  <span class="wf-arrow">&rarr;</span>
+                  <span class="wf-vec">[&thinsp;1.82,&ensp;&minus;0.41,&ensp;&hellip;&thinsp;]<sub class="wf-dim">logits</sub></span>
+                </div>
+              </div>
+              <p>
+                Softmax converts logits to probabilities:
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row">
+                  <span class="wf-lbl">softmax</span>
+                  <span class="wf-vec wf-vec--final">P(y=0)&thinsp;=&thinsp;0.10 &ensp; P(y=1)&thinsp;=&thinsp;0.90<sub class="wf-dim">prediction</sub></span>
+                </div>
+              </div>
+              <p>
+                The model predicts class 1 with 90% confidence.
+                Because Row 3 attended mostly to Row 2 (y=1) and their
+                features were similar, this makes sense.
+              </p>
+            </div>
+          </div>
+
+          <!-- Result ──────────────────────────────────────── -->
+          <div class="walk-step reveal">
+            <div class="walk-num">&#10003;</div>
+            <div class="walk-body walk-body--done">
+              <h3>Result of Stage 3 &mdash; and the full model</h3>
+              <p>
+                The test row gets a class prediction. Train rows are
+                discarded &mdash; they served purely as context.
+              </p>
+              <div class="walk-flow">
+                <div class="wf-row" style="justify-content:center">
+                  <span class="wf-vec wf-vec--final" style="font-size:.9rem;padding:.35rem .8rem">
+                    Row 3 &rarr; predicted class: <strong>1</strong> &ensp;(confidence 90%)
+                  </span>
+                </div>
+              </div>
+              <p class="walk-key">
+                <strong>The complete pipeline:</strong> each cell got a
+                column-aware embedding (Stage 1), features interacted
+                within each row (Stage 2), then the test row read the
+                labeled training rows and an MLP produced a prediction
+                (Stage 3). No weights were updated &mdash; this was a
+                single forward pass through a pretrained model.
+              </p>
+              <p class="walk-aside">
+                During pretraining, the model sees thousands of
+                synthetic tasks like this and learns to extract
+                patterns from context. At inference, it generalizes
+                to new tables it has never seen.
+              </p>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
 
     <!-- ─── Run the real model ─── -->
-    <section class="sect sect--dark" id="code">
+    <section class="sect" id="code">
       <div class="wrap narrow">
         <h2 class="sect-title reveal">Run it yourself.</h2>
         <p class="sect-sub reveal">
           The entire TabICLv2 implementation lives in a single Python file.
           Pretrain on synthetic tasks and evaluate in minutes.
-        </p>
-        <p class="sect-sub reveal" style="font-style:italic;opacity:.75">
-          Note: Any browser-based demo on this page uses a k-NN approximation,
-          not the actual transformer. Run the Python code below for real
-          TabICLv2 results.
         </p>
         <pre class="reveal"><code>uv sync
 uv run python -m nanotabicl.demo          # random-weight demo

@@ -38,7 +38,9 @@ Run smoke tests:
 uv run python -m unittest discover -s tests
 ```
 
-## Website demo (GitHub Pages ready)
+## Website
+
+**Live demo → [jxucoder.github.io/nanoTabICL](https://jxucoder.github.io/nanoTabICL/)**
 
 A visual, animated explanation of TabICLv2 lives in `docs/`:
 
@@ -52,12 +54,6 @@ Preview locally:
 python -m http.server 8000 --directory docs
 # open http://localhost:8000
 ```
-
-Deploy later on GitHub Pages:
-
-1. Push this repo with `docs/`.
-2. Go to `Settings -> Pages`.
-3. Select `Deploy from a branch`, choose `main` and `/docs`.
 
 ## Pretraining
 

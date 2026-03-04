@@ -193,7 +193,10 @@ def evaluate():
 
         row: dict[str, float] = {}
 
-        reg = NanoTabICLRegressor(checkpoint=CHECKPOINT_PATH, device="cuda")
+        # NOTE: Cannot reuse the classification checkpoint here because the
+        # model architecture differs (max_classes=10 vs 0).  Use a fresh
+        # (untrained) regressor so the benchmark still runs end-to-end.
+        reg = NanoTabICLRegressor(device="cuda")
         reg.fit(X_tr, y_tr)
         row["nanoTabICL"] = rmse(reg.predict(X_te))
 

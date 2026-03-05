@@ -332,7 +332,7 @@ class PretrainConfig:
     seed: int = 42
     log_every: int = 100
     use_amp: bool = True
-    warmup_steps: int = 500
+    warmup_steps: int = 50
 
 
 def _resolve_device(s: str) -> torch.device:
@@ -363,7 +363,7 @@ def pretrain(model: NanoTabICL, cfg: PretrainConfig | None = None) -> list[float
     )
 
     use_amp = cfg.use_amp and dev.type == "cuda"
-    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+    scaler = torch.amp.GradScaler(dev.type, enabled=use_amp)
 
     torch.manual_seed(cfg.seed)
     is_cls = model.cfg.max_classes > 0
@@ -395,7 +395,7 @@ def pretrain(model: NanoTabICL, cfg: PretrainConfig | None = None) -> list[float
         sd = X[:, :ts, :].std(dim=1, keepdim=True).clamp(min=1e-6)
         X = (X - mu) / sd
 
-        with torch.amp.autocast("cuda", enabled=use_amp):
+        with torch.amp.autocast(dev.type, enabled=use_amp):
             logits = model(X, Y[:, :ts])
             if is_cls:
                 nc = int(Y.max().item()) + 1
